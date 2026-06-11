@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: jobiq-care-backend
+    runtime: python
+    region: singapore  # closest to India
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: DB_NAME
+        value: JobIQ
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: JobIQ CARE
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OTP_EXPIRE_SECONDS
+        value: "300"
+      - key: ALLOWED_ORIGINS
+        value: "https://jiteshck.github.io"
