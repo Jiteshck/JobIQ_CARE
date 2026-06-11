@@ -314,7 +314,7 @@
     const password = document.getElementById("login-password").value;
     if (!email || !password) return showToast("Please enter both email and password", false);
 
-    const res = await fetch("http://127.0.0.1:8000/login", {
+    const res = await fetch("https://jobiq-care.onrender.com/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -342,7 +342,7 @@
     const password = signupForm.querySelector("#signup-password").value;
     if (!name || !email || !password) return showToast("Fill all fields!", false);
 
-    const res = await fetch("http://127.0.0.1:8000/signup", {
+    const res = await fetch("https://jobiq-care.onrender.com/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password }),
@@ -366,7 +366,7 @@
     const otp = document.getElementById("otp").value;
     if (!otp) return showToast("Please enter OTP", false);
 
-    const res = await fetch("http://127.0.0.1:8000/verify_otp", {
+    const res = await fetch("https://jobiq-care.onrender.com/verify_otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, otp }),
@@ -390,7 +390,7 @@
     const email = document.getElementById("forgot-email").value;
     if (!email) return showToast("Enter your email", false);
 
-    const res = await fetch("http://127.0.0.1:8000/forgot_password", {
+    const res = await fetch("https://jobiq-care.onrender.com/forgot_password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -406,7 +406,7 @@
     const otp = document.getElementById("reset-otp").value;
     const newPassword = document.getElementById("new-password").value;
 
-    const res = await fetch("http://127.0.0.1:8000/reset_password", {
+    const res = await fetch("https://jobiq-care.onrender.com/reset_password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, otp, new_password: newPassword }),
