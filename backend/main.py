@@ -2,21 +2,19 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from passlib.context import CryptContext
 from pymongo import MongoClient
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from typing import List
-import os, json, re, random, string, datetime, google.generativeai as genai
+import os, json, re, random, string, datetime, httpx
+import google.generativeai as genai
 
 # ⚙️ CONFIGURATION
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME")
-MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 MAIL_FROM = os.getenv("MAIL_FROM")
 MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "JobIQ CARE")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -62,18 +60,24 @@ except Exception as e:
 # 🔐 PASSWORD HASHING
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# 📧 EMAIL CONFIG (Brevo SMTP)
-conf = ConnectionConfig(
-    MAIL_USERNAME=MAIL_USERNAME,
-    MAIL_PASSWORD=MAIL_PASSWORD,
-    MAIL_FROM=MAIL_FROM,
-    MAIL_FROM_NAME=MAIL_FROM_NAME,
-    MAIL_PORT=587,
-    MAIL_SERVER="smtp-relay.brevo.com",
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
-    USE_CREDENTIALS=True,
-)
+# 📧 SEND EMAIL VIA BREVO HTTP API
+async def send_email(to_email: str, to_name: str, subject: str, html_body: str):
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json",
+    }
+    payload = {
+        "sender": {"name": MAIL_FROM_NAME, "email": MAIL_FROM},
+        "to": [{"email": to_email, "name": to_name}],
+        "subject": subject,
+        "htmlContent": html_body,
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=headers, json=payload, timeout=10)
+        if response.status_code not in (200, 201):
+            raise Exception(f"Brevo API error {response.status_code}: {response.text}")
 
 # 🧱 MODELS
 class SignupRequest(BaseModel):
@@ -95,6 +99,14 @@ class QuestionRequest(BaseModel):
 class ResultRequest(BaseModel):
     cvData: dict
     answers: list
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
 
 # 🔢 HELPER FUNCTIONS
 def generate_otp(length=6):
@@ -119,7 +131,6 @@ async def signup(user: SignupRequest):
         upsert=True
     )
 
-    # ✉️ HTML Email Template
     html_body = f"""
     <div style="font-family: 'Poppins', sans-serif; background-color: #f6f8fa; padding: 20px;">
       <div style="max-width: 500px; background: white; margin: auto; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); padding: 25px;">
@@ -127,9 +138,7 @@ async def signup(user: SignupRequest):
           <h2 style="color:#468189; margin:0;">JobIQ <span style='color:#2d5c5f;'>CARE</span></h2>
         </div>
         <p style="font-size:1rem; color:#333;">Hi <strong>{user.name}</strong>,</p>
-        <p style="font-size:1rem; color:#333;">
-          Your one-time verification code is:
-        </p>
+        <p style="font-size:1rem; color:#333;">Your one-time verification code is:</p>
         <div style="background:#e8f6f5; color:#468189; text-align:center; font-size:1.8rem; font-weight:700; letter-spacing:3px; padding:15px; border-radius:10px; margin:15px 0;">
           {otp}
         </div>
@@ -137,24 +146,15 @@ async def signup(user: SignupRequest):
         <p style="color:#777; font-size:0.9rem;">Please do not share this code with anyone.</p>
         <hr style="border:none; border-top:1px solid #eee; margin:20px 0;">
         <p style="font-size:0.9rem; text-align:center; color:#777;">
-          Thank you for joining <strong>JobIQ CARE</strong> — AI for your career success.<br>
-          🌐 <a href="https://jobiqcare.ai" style="color:#468189; text-decoration:none;">jobiqcare.ai</a>
+          Thank you for joining <strong>JobIQ CARE</strong> — AI for your career success.
         </p>
       </div>
     </div>
     """
 
-    message = MessageSchema(
-        subject="Your JobIQ CARE Verification Code",
-        recipients=[user.email],
-        body=html_body,
-        subtype="html",
-    )
-
     try:
-        fm = FastMail(conf)
-        await fm.send_message(message)
-        return {"message": "Beautiful OTP email sent successfully!"}
+        await send_email(user.email, user.name, "Your JobIQ CARE Verification Code", html_body)
+        return {"message": "OTP email sent successfully!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send OTP email: {str(e)}")
 
@@ -170,7 +170,6 @@ async def verify_otp(data: VerifyOTPRequest):
     if record["expires_at"] < datetime.datetime.utcnow():
         raise HTTPException(status_code=400, detail="OTP expired")
 
-    # ✅ Save user
     db.users.insert_one({
         "name": record.get("name", ""),
         "email": data.email,
@@ -178,11 +177,8 @@ async def verify_otp(data: VerifyOTPRequest):
         "is_verified": True,
         "created_at": datetime.datetime.utcnow()
     })
-
-    # ✅ Delete OTP record
     db.otps.delete_one({"email": data.email})
 
-    # ✉️ Send Welcome Email
     name = record.get("name", "User")
     html_welcome = f"""
     <div style="font-family: 'Poppins', sans-serif; background-color:#f6f8fa; padding:20px;">
@@ -195,30 +191,18 @@ async def verify_otp(data: VerifyOTPRequest):
           Congratulations! Your JobIQ CARE account has been successfully created and verified.
         </p>
         <p style="font-size:0.95rem; color:#555;">
-          You’re now ready to explore personalized career recommendations powered by AI.
+          You're now ready to explore personalized career recommendations powered by AI.
         </p>
-        <div style="text-align:center; margin:25px 0;">
-          <a href="#" style="background:#468189; color:white; padding:12px 25px; border-radius:8px; text-decoration:none; font-weight:600;">Start Exploring</a>
-        </div>
         <hr style="border:none; border-top:1px solid #eee; margin:20px 0;">
         <p style="font-size:0.9rem; text-align:center; color:#777;">
-          🚀 <strong>JobIQ CARE</strong> – AI for your career success.<br>
-          🌐 <a href="#" style="color:#468189; text-decoration:none;">jobiqcare.ai</a>
+          🚀 <strong>JobIQ CARE</strong> – AI for your career success.
         </p>
       </div>
     </div>
     """
 
-    welcome_message = MessageSchema(
-        subject="🎉 Welcome to JobIQ CARE!",
-        recipients=[data.email],
-        body=html_welcome,
-        subtype="html"
-    )
-
     try:
-        fm = FastMail(conf)
-        await fm.send_message(welcome_message)
+        await send_email(data.email, name, "🎉 Welcome to JobIQ CARE!", html_welcome)
     except Exception as e:
         print("⚠️ Failed to send welcome email:", e)
 
@@ -264,7 +248,6 @@ async def analyze_cv(request: Request):
 
         response = model.generate_content(prompt)
         content = response.text.strip()
-
         match = re.search(r"\{.*\}", content, re.DOTALL)
         parsed = json.loads(match.group(0)) if match else {"error": "Invalid JSON", "raw": content}
         return parsed
@@ -281,7 +264,7 @@ async def generate_questions(req: QuestionRequest):
         model = genai.GenerativeModel(MODEL_NAME)
         prompt = f"""
         You are an intelligent career interviewer.
-        Based on this candidate’s CV, generate 6 relevant and diverse interview questions.
+        Based on this candidate's CV, generate 6 relevant and diverse interview questions.
         Make them thoughtful and personalized.
 
         CV DATA:
@@ -335,7 +318,7 @@ async def generate_result(req: ResultRequest):
               "match_score": number (0-100),
               "reason": "Why this job fits them",
               "skills_to_learn": ["Skill1", "Skill2"],
-              "salary": "Salary range in INR (e.g. 10–15 LPA)"
+              "salary": "Salary range in INR (e.g. 10-15 LPA)"
             }}
           ]
         }}
@@ -351,15 +334,7 @@ async def generate_result(req: ResultRequest):
         print("❌ Gemini Error (Result Generation):", e)
         raise HTTPException(status_code=500, detail=f"Gemini error: {e}")
 
-#FORGET PASSWORD 
-class ForgotPasswordRequest(BaseModel):
-    email: str
-
-class ResetPasswordRequest(BaseModel):
-    email: str
-    otp: str
-    new_password: str
-
+# 🔑 FORGOT PASSWORD
 @app.post("/forgot_password")
 async def forgot_password(req: ForgotPasswordRequest):
     user = db.users.find_one({"email": req.email})
@@ -390,21 +365,14 @@ async def forgot_password(req: ForgotPasswordRequest):
     </div>
     """
 
-    message = MessageSchema(
-        subject="JobIQ CARE Password Reset Code",
-        recipients=[req.email],
-        body=html_body,
-        subtype="html"
-    )
-
     try:
-        fm = FastMail(conf)
-        await fm.send_message(message)
+        await send_email(req.email, req.email, "JobIQ CARE Password Reset Code", html_body)
         return {"message": "Password reset OTP sent successfully!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send reset OTP: {str(e)}")
 
 
+# 🔄 RESET PASSWORD
 @app.post("/reset_password")
 async def reset_password(req: ResetPasswordRequest):
     record = db.otps.find_one({"email": req.email, "type": "reset"})
