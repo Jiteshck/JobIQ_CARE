@@ -1,111 +1,148 @@
-# JobIQ
+# JobIQ CARE
 
-JobIQ is a simple web-based project that analyzes uploaded CVs and provides relevant job recommendations.  
-It contains a **Python backend** (API / logic) and a **HTML-CSS frontend** for the user interface.
+JobIQ CARE is an AI-powered career advisor that analyzes uploaded CVs, generates personalized interview questions, and recommends the most suitable jobs based on your skills and experience.
+
+**Live Frontend:** [jiteshck.github.io/JobIQ_CARE](https://jiteshck.github.io/JobIQ_CARE/)  
+**Backend:** Hosted on [Render](https://render.com)
 
 ---
 
 ## 🗂️ Project Structure
 
 ```
-JobIQ/
+JobIQ_CARE/
 │
 ├── backend/
-│   ├── main.py             # main backend script
-│   ├── models.py           # additional Python modules
-│   ├── requirements.txt    # list of Python dependencies
-│   ├── .env                # environment variables (not uploaded)
-│   └── venv/               # local virtual environment (ignored)
+│   ├── main.py             # FastAPI backend (API routes, Gemini, email)
+│   ├── models.py           # Pydantic models
+│   ├── requirements.txt    # Python dependencies
+│   └── .env                # Environment variables (never commit this)
 │
 ├── frontend/
-│   ├── index.html
-│   ├── index.css
-│   ├── login.html
-│   ├── analyze.html
-│   ├── result.html
-│   └── upload_cv.html
+│   ├── index.html          # Landing page
+│   ├── index.css           # Styles
+│   ├── login.html          # Login / Signup
+│   ├── analyze.html        # Interview questions
+│   ├── result.html         # Job recommendations
+│   └── upload_cv.html      # CV upload page
 │
+├── render.yaml             # Render deployment config
+├── .env.example            # Environment variable template
 └── .gitignore
 ```
 
 ---
 
-## ⚙️ Setup Instructions
+## 🚀 Tech Stack
+
+| Layer     | Technology                          |
+|-----------|-------------------------------------|
+| Frontend  | HTML, CSS, JavaScript (GitHub Pages)|
+| Backend   | Python, FastAPI, Uvicorn            |
+| AI        | Google Gemini 2.5 Flash             |
+| Database  | MongoDB Atlas                       |
+| Email     | Brevo HTTP API                      |
+| Hosting   | Render (backend), GitHub Pages (frontend) |
+
+---
+
+## ⚙️ Local Setup
 
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/yash-vikas-kale/JobIQ.git
-cd JobIQ/backend
+git clone https://github.com/Jiteshck/JobIQ_CARE.git
+cd JobIQ_CARE/backend
 ```
 
-### 2️⃣ Create a Virtual Environment
+### 2️⃣ Create & Activate Virtual Environment
 ```bash
+# Windows
 python -m venv venv
-```
-
-### 3️⃣ Activate the Virtual Environment
-#### On Windows:
-```bash
 venv\Scripts\activate
-```
-#### On macOS / Linux:
-```bash
+
+# macOS / Linux
+python -m venv venv
 source venv/bin/activate
 ```
 
-### 4️⃣ Install Dependencies
+### 3️⃣ Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 5️⃣ Install Gemini
+### 4️⃣ Set Up Environment Variables
+Create a `.env` file inside the `backend/` folder (use `.env.example` as a template):
+
+```env
+MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>
+DB_NAME=JobIQ
+
+# Brevo HTTP API key (app.brevo.com → SMTP & API → API Keys)
+BREVO_API_KEY=your-api-key-here
+
+# Must be a verified sender in Brevo → Senders & Domains
+MAIL_FROM=your@email.com
+MAIL_FROM_NAME=JobIQ CARE
+
+GEMINI_API_KEY=your-gemini-api-key
+OTP_EXPIRE_SECONDS=300
+
+# Comma-separated, no spaces
+ALLOWED_ORIGINS=https://jiteshck.github.io,http://localhost:8000
+```
+
+### 5️⃣ Run the Backend
 ```bash
-pip install google-generativeai
-```
-
-### 6️⃣ Set Up Environment Variables
-Create `.env` inside `backend` with:
-```
-MONGO_URI = "your_database_url_here"
-DB_NAME = "Database_Name_here"
-MAIL_USERNAME = "Your Mail here"
-MAIL_PASSWORD = "PASSWORD TO GENRATE MAIL"
-MAIL_FROM = "Your Mail here"
-MAIL_PORT = PORT_HERE
-MAIL_SERVER = "SERVER_HERE"
-GEMINI_API_KEY=your_api_key_here
-
-```
-
-### 7️⃣ Run the Backend
-```bash
-python main.py
+uvicorn main:app --reload
 ```
 
 Server runs at `http://127.0.0.1:8000`
 
-### 8️⃣  View the Frontend
-Open `frontend/index.html` in your browser.
+---
+
+## ☁️ Deploying to Render
+
+1. Push your code to GitHub
+2. Go to [render.com](https://render.com) → New → Web Service → connect your repo
+3. Render will auto-detect `render.yaml` — just fill in the secret env vars in the dashboard:
+   - `MONGO_URI`, `BREVO_API_KEY`, `MAIL_FROM`, `GEMINI_API_KEY`
+4. Set **Root Directory** to `backend`
+5. Deploy
+
+To redeploy after changes:
+```bash
+git add .
+git commit -m "your message"
+git push
+```
+
+---
+
+## 🔑 Getting API Keys
+
+**Brevo (email):**
+1. Sign up at [app.brevo.com](https://app.brevo.com)
+2. Go to SMTP & API → API Keys → Generate a new key (`xkeysib-...`)
+3. Go to Senders & Domains → verify your sender email
+
+**Google Gemini:**
+1. Go to [aistudio.google.com](https://aistudio.google.com)
+2. Get API Key
+
+**MongoDB Atlas:**
+1. Go to [cloud.mongodb.com](https://cloud.mongodb.com)
+2. Create a cluster → Connect → Get your connection string
 
 ---
 
 ## 🧰 Notes
-* Do not upload `.env` or `venv` to GitHub.
-* To commit changes:
-  ```bash
-  git add .
-  git commit -m "update"
-  git push
-  ```
-* To deactivate:
-  ```bash
-  deactivate
-  ```
+
+- Never commit `.env` or `venv/` to GitHub (already in `.gitignore`)
+- Render's free plan spins down after inactivity — first request may be slow
+- Frontend API calls must point to your Render backend URL
 
 ---
 
-## 👤 Team Member
-**Yash Kale** <br>
-**Jitesh Choudhary** <br>
-**Ruturaj Borawake** <br>
-**Ayush Saraf** <br>
+## 👤 Creater
+
+**Jitesh Choudhary**  
